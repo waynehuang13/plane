@@ -14,7 +14,7 @@ on:
       releaseVersion:
         description: "Release Version"
         type: string
-        default: v1.2.1-1
+        default: v1.2.1-oidc
       isPrerelease:
         description: "Is Pre-release"
         type: boolean
@@ -38,6 +38,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       release_version: ${{ steps.set_vars.outputs.release_version }}
+      version_with_sha: ${{ steps.set_vars.outputs.version_with_sha }}
       build_type: ${{ steps.set_vars.outputs.build_type }}
       is_prerelease: ${{ steps.set_vars.outputs.is_prerelease }}
     steps:
@@ -47,15 +48,21 @@ jobs:
       - name: Set variables
         id: set_vars
         run: |
+          # Get short commit SHA
+          SHORT_SHA=$(git rev-parse --short HEAD)
+
           if [ "${{ github.event.inputs.build_type }}" == "Release" ]; then
             echo "build_type=Release" >> $GITHUB_OUTPUT
-            echo "release_version=${{ github.event.inputs.releaseVersion }}" >> $GITHUB_OUTPUT
+            BASE_VERSION="${{ github.event.inputs.releaseVersion }}"
+            echo "release_version=${BASE_VERSION}" >> $GITHUB_OUTPUT
+            echo "version_with_sha=${BASE_VERSION}-${SHORT_SHA}" >> $GITHUB_OUTPUT
             echo "is_prerelease=${{ github.event.inputs.isPrerelease }}" >> $GITHUB_OUTPUT
           else
             echo "build_type=Build" >> $GITHUB_OUTPUT
-            # Use branch name or tag as version
-            REF_NAME="${GITHUB_REF##*/}"
-            echo "release_version=${REF_NAME}" >> $GITHUB_OUTPUT
+            # Default to v1.2.1-oidc for branch builds
+            BASE_VERSION="v1.2.1-oidc"
+            echo "release_version=${BASE_VERSION}" >> $GITHUB_OUTPUT
+            echo "version_with_sha=${BASE_VERSION}-${SHORT_SHA}" >> $GITHUB_OUTPUT
             echo "is_prerelease=false" >> $GITHUB_OUTPUT
           fi
 
@@ -86,12 +93,9 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/web
           tags: |
-            type=ref,event=branch
-            type=ref,event=pr
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=sha,prefix={{branch}}-
+            type=raw,value=${{ needs.setup.outputs.version_with_sha }}
             type=raw,value=${{ needs.setup.outputs.release_version }}
+            type=raw,value=latest
 
       - name: Build and push
         uses: docker/build-push-action@v5
@@ -133,12 +137,9 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/admin
           tags: |
-            type=ref,event=branch
-            type=ref,event=pr
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=sha,prefix={{branch}}-
+            type=raw,value=${{ needs.setup.outputs.version_with_sha }}
             type=raw,value=${{ needs.setup.outputs.release_version }}
+            type=raw,value=latest
 
       - name: Build and push
         uses: docker/build-push-action@v5
@@ -180,12 +181,9 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/space
           tags: |
-            type=ref,event=branch
-            type=ref,event=pr
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=sha,prefix={{branch}}-
+            type=raw,value=${{ needs.setup.outputs.version_with_sha }}
             type=raw,value=${{ needs.setup.outputs.release_version }}
+            type=raw,value=latest
 
       - name: Build and push
         uses: docker/build-push-action@v5
@@ -227,12 +225,9 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/live
           tags: |
-            type=ref,event=branch
-            type=ref,event=pr
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=sha,prefix={{branch}}-
+            type=raw,value=${{ needs.setup.outputs.version_with_sha }}
             type=raw,value=${{ needs.setup.outputs.release_version }}
+            type=raw,value=latest
 
       - name: Build and push
         uses: docker/build-push-action@v5
@@ -274,12 +269,9 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/api
           tags: |
-            type=ref,event=branch
-            type=ref,event=pr
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=sha,prefix={{branch}}-
+            type=raw,value=${{ needs.setup.outputs.version_with_sha }}
             type=raw,value=${{ needs.setup.outputs.release_version }}
+            type=raw,value=latest
 
       - name: Build and push
         uses: docker/build-push-action@v5
@@ -321,12 +313,9 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/proxy
           tags: |
-            type=ref,event=branch
-            type=ref,event=pr
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=sha,prefix={{branch}}-
+            type=raw,value=${{ needs.setup.outputs.version_with_sha }}
             type=raw,value=${{ needs.setup.outputs.release_version }}
+            type=raw,value=latest
 
       - name: Build and push
         uses: docker/build-push-action@v5
