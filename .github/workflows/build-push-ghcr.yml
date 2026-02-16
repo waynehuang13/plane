@@ -321,7 +321,7 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           context: ./apps/proxy
-          file: ./apps/proxy/Dockerfile.ce
+          file: ./apps/proxy/Dockerfile.nginx
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
