@@ -22,6 +22,11 @@ from plane.utils.path_validator import get_safe_redirect_url
 
 class OidcInitiateEndpoint(View):
     def get(self, request):
+        # Clear any old OIDC state/nonce from previous failed attempts
+        keys_to_clear = [key for key in request.session.keys() if key.startswith("oidc_nonce_")]
+        for key in keys_to_clear:
+            del request.session[key]
+
         request.session["host"] = base_host(request=request, is_app=True)
         next_path = request.GET.get("next_path")
         if next_path:
