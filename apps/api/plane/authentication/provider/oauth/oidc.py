@@ -74,19 +74,30 @@ class OidcProvider(OauthAdapter):
         client_secret = OIDC_CLIENT_SECRET
         scope = "openid profile email"
 
+        # Store state for later reference
+        self.state = state
+
         redirect_uri = f"""{"https" if request.is_secure() else "http"}://{request.get_host()}/auth/oidc/callback/"""
 
         nonce = uuid.uuid4().hex
         # Store nonce in Redis using state as key (more reliable than session cookies for OAuth redirects)
         if state:
-            cache.set(f"oidc_nonce_{state}", nonce, timeout=600)  # 10 minute expiry
-            # Debug logging
             import logging
 
             logger = logging.getLogger("plane.api")
-            logger.info(f"OIDC initiate - state: {state}, nonce: {nonce}, stored in Redis")
+
+            # Store in Redis with longer timeout for reliability
+            cache_key = f"oidc_nonce_{state}"
+            cache.set(cache_key, nonce, timeout=900)  # 15 minute expiry
+
+            # Verify it was stored
+            stored_value = cache.get(cache_key)
+            logger.info(
+                f"OIDC initiate - state: {state}, nonce: {nonce}, stored in Redis: {stored_value}, verified: {stored_value == nonce}"
+            )
+
         # Also store in session as fallback
-        request.session["oidc_nonce"] = nonce
+        request.session[f"oidc_nonce_{state}"] = nonce
         request.session.modified = True
 
         url_params = {
@@ -121,12 +132,15 @@ class OidcProvider(OauthAdapter):
 
         self.oidc_nonce = None
         if state:
-            self.oidc_nonce = cache.get(f"oidc_nonce_{state}")
+            cache_key = f"oidc_nonce_{state}"
+            self.oidc_nonce = cache.get(cache_key)
             logger.info(f"OIDC callback - state: {state}, nonce from Redis: {self.oidc_nonce}")
-        if not self.oidc_nonce:
-            self.oidc_nonce = request.session.get("oidc_nonce")
+
+        if not self.oidc_nonce and state:
+            # Try session with state-specific key
+            self.oidc_nonce = request.session.get(f"oidc_nonce_{state}")
             if self.oidc_nonce:
-                logger.info(f"OIDC callback - using session nonce: {self.oidc_nonce}")
+                logger.info(f"OIDC callback - using session nonce (state-specific): {self.oidc_nonce}")
 
     def validate_id_token(self, id_token):
         """Validate ID token signature and claims"""
@@ -148,8 +162,20 @@ class OidcProvider(OauthAdapter):
             # Validate nonce
             token_nonce = decoded_token.get("nonce")
             if not self.oidc_nonce:
+                import logging
+
+                logger = logging.getLogger("plane.api")
+                logger.error(
+                    f"No nonce found in storage. Token nonce: {token_nonce}, state: {getattr(self, 'state', 'unknown')}"
+                )
                 raise ValueError(f"No nonce found in session. Token nonce: {token_nonce}")
             if token_nonce != self.oidc_nonce:
+                import logging
+
+                logger = logging.getLogger("plane.api")
+                logger.error(
+                    f"Nonce mismatch. Expected: {self.oidc_nonce}, Got: {token_nonce}, state: {getattr(self, 'state', 'unknown')}"
+                )
                 raise ValueError(f"Invalid nonce in ID token. Expected: {self.oidc_nonce}, Got: {token_nonce}")
 
             return decoded_token
