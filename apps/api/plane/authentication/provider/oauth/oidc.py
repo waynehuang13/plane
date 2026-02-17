@@ -79,26 +79,33 @@ class OidcProvider(OauthAdapter):
 
         redirect_uri = f"""{"https" if request.is_secure() else "http"}://{request.get_host()}/auth/oidc/callback/"""
 
-        nonce = uuid.uuid4().hex
-        # Store nonce in Redis using state as key (more reliable than session cookies for OAuth redirects)
-        if state:
-            import logging
+        # Only generate and store nonce during initiate (when code is None)
+        # During callback, we retrieve the existing nonce
+        if code is None:
+            # This is the initiate flow - generate new nonce
+            nonce = uuid.uuid4().hex
+            # Store nonce in Redis using state as key (more reliable than session cookies for OAuth redirects)
+            if state:
+                import logging
 
-            logger = logging.getLogger("plane.api")
+                logger = logging.getLogger("plane.api")
 
-            # Store in Redis with longer timeout for reliability
-            cache_key = f"oidc_nonce_{state}"
-            cache.set(cache_key, nonce, timeout=900)  # 15 minute expiry
+                # Store in Redis with longer timeout for reliability
+                cache_key = f"oidc_nonce_{state}"
+                cache.set(cache_key, nonce, timeout=900)  # 15 minute expiry
 
-            # Verify it was stored
-            stored_value = cache.get(cache_key)
-            logger.info(
-                f"OIDC initiate - state: {state}, nonce: {nonce}, stored in Redis: {stored_value}, verified: {stored_value == nonce}"
-            )
+                # Verify it was stored
+                stored_value = cache.get(cache_key)
+                logger.info(
+                    f"OIDC initiate - state: {state}, nonce: {nonce}, stored in Redis: {stored_value}, verified: {stored_value == nonce}"
+                )
 
-        # Also store in session as fallback
-        request.session[f"oidc_nonce_{state}"] = nonce
-        request.session.modified = True
+            # Also store in session as fallback
+            request.session[f"oidc_nonce_{state}"] = nonce
+            request.session.modified = True
+        else:
+            # This is the callback flow - retrieve existing nonce (will be set later)
+            nonce = None
 
         url_params = {
             "client_id": client_id,
